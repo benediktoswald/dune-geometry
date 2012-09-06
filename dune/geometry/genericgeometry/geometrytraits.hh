@@ -3,13 +3,12 @@
 #ifndef DUNE_GEOMETRY_GENERICGEOMETRY_GEOMETRYTRAITS_HH
 #define DUNE_GEOMETRY_GENERICGEOMETRY_GEOMETRYTRAITS_HH
 
-#include <dune/geometry/genericgeometry/cornermapping.hh>
-#include <dune/geometry/genericgeometry/matrixhelper.hh>
-#include <dune/geometry/type.hh>
+#include "../type.hh"
+#include "matrixhelper.hh"
+#include "cornermapping.hh"
 
 namespace Dune
 {
-
   namespace GenericGeometry
   {
 
@@ -133,7 +132,7 @@ namespace Dune
        *  parameter <em>topologyId</em> is required.
        *  Here's an example:
        *  \code
-       *  static const unsigned int topologyId = SimplexTopology< dim >::type::id;
+       *  static const unsigned int topologyId = SimplexTopology< dim_of_reference_element >::type::id;
        *  \endcode
        */
       template< int dim >
@@ -207,16 +206,19 @@ namespace Dune
      *  can be used (via subclassing) to provide the necessary information. It
      *  contains exactly the fields that are necessary:
      *  \code
-     *  template< class ctype, int dimG, int dimW >
+     *  template< class ctype, int dimW >
      *  struct DefaultGeometryTraits
      *  {
      *    typedef DuneCoordTraits< ctype > CoordTraits;
      *
-     *    static const int dimGrid = dimG;
      *    static const int dimWorld = dimW;
      *
-     *    //   hybrid   [ true if Codim 0 is hybrid ]
-     *    static const bool hybrid = true;
+     *    template< int dim >
+     *    struct hasSingleGeometryType
+     *    {
+     *      static const bool v = false;
+     *      static const unsigned int topologyId = ~0u;
+     *    };
      *
      *    template< class Topology >
      *    struct Mapping
@@ -233,6 +235,9 @@ namespace Dune
      *      static const EvaluationType evaluateJacobianInverseTransposed = ComputeOnDemand;
      *      static const EvaluationType evaluateIntegrationElement = ComputeOnDemand;
      *    };
+     *
+     *    // arbitrary type for user data (nothing, here)
+     *    struct UserData {};
      *  };
      *  \endcode
      *
@@ -269,16 +274,19 @@ namespace Dune
      *  can be used (via subclassing) to provide the necessary information. It
      *  contains exactly the fields that are necessary:
      *  \code
-     *  template< class ctype, int dimG, int dimW >
+     *  template< class ctype, int dimW >
      *  struct DefaultGeometryTraits
      *  {
      *    typedef DuneCoordTraits< ctype > CoordTraits;
      *
-     *    static const int dimGrid = dimG;
      *    static const int dimWorld = dimW;
      *
-     *    //   hybrid   [ true if Codim 0 is hybrid ]
-     *    static const bool hybrid = true;
+     *    template< int dim >
+     *    struct hasSingleGeometryType
+     *    {
+     *      static const bool v = false;
+     *      static const unsigned int topologyId = ~0u;
+     *    };
      *
      *    template< class Topology >
      *    struct Mapping
@@ -295,6 +303,9 @@ namespace Dune
      *      static const EvaluationType evaluateJacobianInverseTransposed = ComputeOnDemand;
      *      static const EvaluationType evaluateIntegrationElement = ComputeOnDemand;
      *    };
+     *
+     *    // arbitrary type for user data (nothing, here)
+     *    struct UserData {};
      *  };
      *  \endcode
      *
