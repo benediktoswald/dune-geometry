@@ -1,18 +1,15 @@
 // -*- tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 // vi: set et ts=4 sw=2 sts=2:
-#ifndef DUNE_GEOMETRY_REFERENCEELEMENTS_HH
-#define DUNE_GEOMETRY_REFERENCEELEMENTS_HH
+#ifndef DUNE_GEOMETRY_GENERICREFERENCEELEMENTS_HH
+#define DUNE_GEOMETRY_GENERICREFERENCEELEMENTS_HH
 
 #include <dune/common/forloop.hh>
-#include <dune/common/nullptr.hh>
 #include <dune/common/typetraits.hh>
 
 #include <dune/geometry/genericgeometry/subtopologies.hh>
 #include <dune/geometry/genericgeometry/referencedomain.hh>
 #include <dune/geometry/genericgeometry/hybridmapping.hh>
 #include <dune/geometry/genericgeometry/hybridmappingfactory.hh>
-
-#include "genericreferenceelements.hh"
 
 namespace Dune
 {
@@ -21,14 +18,14 @@ namespace Dune
   // -----------------------------
 
   template< class ctype, int dim >
-  class ReferenceElementContainer;
+  class GenericReferenceElementContainer;
 
 
 
-  // ReferenceElement
+  // GenericReferenceElement
   // -----------------------
 
-  /** \class ReferenceElement
+  /** \class GenericReferenceElement
    *  \ingroup GeometryReferenceElements
    *  \brief This class provides access to geometric and topological
    *  properties of a reference element. This includes its type,
@@ -38,25 +35,29 @@ namespace Dune
    *  provided.
    *
    *  A singleton of this class for a given geometry type can be accessed
-   *  through the ReferenceElements class.
-
+   *  through the GenericReferenceElements class.
+   *
+   * \deprecated GenericReferenceElement was renamed to ReferenceElement. The class
+   * with the old name will be removed after Dune 2.3.
+   *
    *  \tparam ctype  field type for coordinates
    *  \tparam dim    dimension of the reference element
    *
    */
   template< class ctype, int dim >
-  class ReferenceElement
+  class DUNE_DEPRECATED_MSG("GenericReferenceElement was renamed to ReferenceElement.")
+  GenericReferenceElement
   {
-    typedef ReferenceElement< ctype, dim > This;
+    typedef GenericReferenceElement< ctype, dim > This;
 
-    friend class ReferenceElementContainer< ctype, dim >;
+    friend class GenericReferenceElementContainer< ctype, dim >;
 
     // make copy constructor private
-    ReferenceElement(const ReferenceElement &);
+    GenericReferenceElement(const GenericReferenceElement &);
 
-    ReferenceElement () {}
+    GenericReferenceElement () {}
 
-    ~ReferenceElement ()
+    ~GenericReferenceElement ()
     {
       ForLoop< Destroy, 0, dim >::apply( mappings_ );
       integral_constant< int, 0 > codim0Variable;
@@ -364,51 +365,28 @@ namespace Dune
    *     of a reference element
    */
   template< class ctype, int dim >
-  class ReferenceElement< ctype, dim >::SubEntityInfo
+  class GenericReferenceElement< ctype, dim >::SubEntityInfo
   {
-    unsigned int *numbering_;
-    unsigned int offset_[ dim+2 ];
+    template< class Topology, int codim > struct Initialize
+    {
+      template< int subcodim > struct SubCodim;
+    };
+
+    std::vector< int > numbering_[ dim+1 ];
     FieldVector< ctype, dim > baryCenter_;
     GeometryType type_;
 
   public:
-    SubEntityInfo () : numbering_( nullptr )
-    {
-      std::fill( offset_, offset_ + (dim+2), 0 );
-    }
-
-    SubEntityInfo ( const SubEntityInfo &other )
-      : type_( other.type_ )
-    {
-      std::copy( other.offset_, other.offset_ + (dim+2), offset_ );
-      numbering_ = allocate();
-      std::copy( other.numbering_, other.numbering_ + capacity(), numbering_ );
-    }
-
-    ~SubEntityInfo () { deallocate( numbering_ ); }
-
-    const SubEntityInfo &operator= ( const SubEntityInfo &other )
-    {
-      type_ = other.type_;
-      std::copy( other.offset_, other.offset_ + (dim+2), offset_ );
-
-      deallocate( numbering_ );
-      numbering_ = allocate();
-      std::copy( other.numbering_, other.numbering_ + capacity(), numbering_ );
-
-      return *this;
-    }
-
     int size ( int cc ) const
     {
-      assert( (cc >= codim()) && (cc <= dim) );
-      return (offset_[ cc+1 ] - offset_[ cc ]);
+      assert( cc <= dim );
+      return numbering_[ cc ].size();
     }
 
     int number ( int ii, int cc ) const
     {
-      assert( (ii >= 0) && (ii < size( cc )) );
-      return numbering_[ offset_[ cc ] + ii ];
+      assert( cc <= dim );
+      return numbering_[ cc ][ ii ];
     }
 
     const FieldVector< ctype, dim > &position () const
@@ -421,35 +399,17 @@ namespace Dune
       return type_;
     }
 
-    /** \brief Initialize the members of the class */
-    template <class Topology>
-    void initialize ( int codim, unsigned int i )
+    template< class Topology, unsigned int codim, unsigned int i >
+    void initialize ()
     {
-      // Determine the geometry type
-      const unsigned int subId = GenericGeometry::subTopologyId( Topology::id, dim, codim, i );
-      type_ = GeometryType( subId, dim-codim );
-
-      // Determine the subentity numbering
-      // compute offsets
-      for( int cc = 0; cc <= codim; ++cc )
-        offset_[ cc ] = 0;
-      for( int cc = codim; cc <= dim; ++cc )
-        offset_[ cc+1 ] = offset_[ cc ] + GenericGeometry::size( subId, dim-codim, cc-codim );
-
-      // compute subnumbering
-      deallocate( numbering_ );
-      numbering_ = allocate();
-      for( int cc = codim; cc <= dim; ++cc )
-      {
-        for( unsigned int ii = 0; ii < offset_[ cc+1 ] - offset_[ cc ]; ++ii )
-          numbering_[ offset_[ cc ] + ii ] = GenericGeometry::subTopologyNumber( Topology::id, dim, codim, i, cc-codim, ii );
-      }
-
-      // Compute the element barycenter
+      typedef Initialize< Topology, codim > Init;
       typedef GenericGeometry::ReferenceDomain< Topology > RefDomain;
 
+      const unsigned int iVariable = i;
+      Dune::ForLoop< Init::template SubCodim, 0, dim-codim >::apply( iVariable, numbering_ );
+
       baryCenter_ = ctype( 0 );
-      const unsigned int numCorners = size( dim );
+      static const unsigned int numCorners = size( dim );
       for( unsigned int j = 0; j < numCorners; ++j )
       {
         FieldVector< ctype, dim > corner;
@@ -457,20 +417,16 @@ namespace Dune
         baryCenter_ += corner;
       }
       baryCenter_ *= ctype( 1 ) / ctype( numCorners );
+
+      typedef typename GenericGeometry::SubTopology< Topology, codim, i >::type SubTopology;
+      type_ = GeometryType( SubTopology::id, SubTopology::dimension );
     }
-
-  protected:
-    int codim () const { return dim - type().dim(); }
-
-    unsigned int *allocate () { return (capacity() != 0 ? new unsigned int[ capacity() ] : nullptr); }
-    void deallocate ( unsigned int *ptr ) { delete[] ptr; }
-    unsigned int capacity () const { return offset_[ dim+1 ]; }
   };
 
 
   template< class ctype, int dim >
   template< class Topology >
-  class ReferenceElement< ctype, dim >::CornerStorage
+  class GenericReferenceElement< ctype, dim >::CornerStorage
   {
     typedef GenericGeometry::ReferenceDomain< Topology > RefDomain;
 
@@ -508,25 +464,50 @@ namespace Dune
 
 
   template< class ctype, int dim >
-  template< class Topology >
-  struct ReferenceElement< ctype, dim >::Initialize
+  template< class Topology, int codim >
+  template< int subcodim >
+  struct GenericReferenceElement< ctype, dim >::SubEntityInfo::Initialize< Topology, codim >::SubCodim
   {
-    typedef Dune::ReferenceElement< ctype, dim > ReferenceElement;
+    typedef GenericGeometry::SubTopologySize< Topology, codim, subcodim > SubSize;
+    typedef GenericGeometry::GenericSubTopologyNumbering< Topology, codim, subcodim > SubNumbering;
 
-    typedef typename ReferenceElement::template Codim< 0 >::Mapping ReferenceMapping;
+    static void apply ( unsigned int i, std::vector< int > (&numbering)[ dim+1 ] )
+    {
+      const unsigned int size = SubSize::size( i );
+      numbering[ codim+subcodim ].resize( size );
+      for( unsigned int j = 0; j < size; ++j )
+        numbering[ codim+subcodim ][ j ] = SubNumbering::number( i, j );
+    }
+  };
+
+
+  template< class ctype, int dim >
+  template< class Topology >
+  struct GenericReferenceElement< ctype, dim >::Initialize
+  {
+    typedef Dune::GenericReferenceElement< ctype, dim > GenericReferenceElement;
+
+    typedef typename GenericReferenceElement::template Codim< 0 >::Mapping ReferenceMapping;
 
     template< int codim >
     struct Codim
     {
+      template< int i >
+      struct SubTopology
+      {
+        static void apply ( std::vector< SubEntityInfo > &info )
+        {
+          info[ i ].template initialize< Topology, codim, i >();
+        }
+      };
+
       static void
       apply ( std::vector< SubEntityInfo > (&info)[ dim+1 ],
               MappingsTable &mappings )
       {
         const unsigned int size = GenericGeometry::Size< Topology, codim >::value;
         info[ codim ].resize( size );
-
-        for (size_t i=0; i<size; i++)
-          info[ codim ][ i ].template initialize< Topology >(codim,i);
+        Dune::ForLoop< SubTopology, 0, size-1 >::apply( info[ codim ] );
 
         if( codim > 0 )
         {
@@ -550,7 +531,7 @@ namespace Dune
 
   template< class ctype, int dim >
   template< int codim >
-  struct ReferenceElement< ctype, dim >::Destroy
+  struct GenericReferenceElement< ctype, dim >::Destroy
   {
     static void apply ( MappingsTable &mappings )
     {
@@ -568,20 +549,24 @@ namespace Dune
   };
 
 
-
-  // ReferenceElementContainer
+  // GenericReferenceElementContainer
   // --------------------------------
 
+  /**
+   * \deprecated GenericReferenceElementContainer was renamed to ReferenceElementContainer.
+   * The class with the old name will be removed after Dune 2.3.
+   */
   template< class ctype, int dim >
-  class ReferenceElementContainer
+  class DUNE_DEPRECATED_MSG("GenericReferenceElementContainer was renamed to ReferenceElementContainer.")
+  GenericReferenceElementContainer
   {
     static const unsigned int numTopologies = (1u << dim);
 
   public:
-    typedef ReferenceElement< ctype, dim > value_type;
+    typedef GenericReferenceElement< ctype, dim > value_type;
     typedef const value_type *const_iterator;
 
-    ReferenceElementContainer ()
+    GenericReferenceElementContainer ()
     {
       ForLoop< Builder, 0, numTopologies-1 >::apply( values_ );
     }
@@ -630,38 +615,41 @@ namespace Dune
   };
 
 
-
-  // ReferenceElements
+  // GenericReferenceElements
   // ------------------------
 
-  /** \brief Class providing access to the singletons of the
+  /** \brief Class providing access to the singletons of the generic
    *  reference elements. Special methods are available for
    *  simplex and cube elements of any dimension.
    *  The method general can be used to obtain the reference element
    *  for a given geometry type.
    *
    *  \ingroup GeometryReferenceElements
+   *
+   *  \deprecated GenericReferenceElements was renamed to ReferenceElements. The class
+   *  with the old name will be removed after Dune 2.3.
    */
   template< class ctype, int dim >
-  struct ReferenceElements
+  struct DUNE_DEPRECATED_MSG ("GenericReferenceElements was renamed to ReferenceElements.")
+  GenericReferenceElements
   {
-    typedef typename ReferenceElementContainer< ctype, dim >::const_iterator Iterator;
+    typedef typename GenericReferenceElementContainer< ctype, dim >::const_iterator Iterator;
 
-    //! get general reference elements
-    static const ReferenceElement< ctype, dim > &
+    //! get general generic reference elements
+    static const GenericReferenceElement< ctype, dim > &
     general ( const GeometryType &type )
     {
       return container() ( type );
     }
 
-    //! get simplex reference elements
-    static const ReferenceElement< ctype, dim > &simplex ()
+    //! get simplex generic reference elements
+    static const GenericReferenceElement< ctype, dim > &simplex ()
     {
       return container().simplex();
     }
 
-    //! get hypercube reference elements
-    static const ReferenceElement< ctype, dim > &cube ()
+    //! get hypercube generic reference elements
+    static const GenericReferenceElement< ctype, dim > &cube ()
     {
       return container().cube();
     }
@@ -670,13 +658,13 @@ namespace Dune
     static Iterator end () { return container().end(); }
 
   private:
-    static const ReferenceElementContainer< ctype, dim > &container ()
+    static const GenericReferenceElementContainer< ctype, dim > &container ()
     {
-      static ReferenceElementContainer< ctype, dim > container;
+      static GenericReferenceElementContainer< ctype, dim > container;
       return container;
     }
   };
 
 } // namespace Dune
 
-#endif // #ifndef DUNE_GEOMETRY_REFERENCEELEMENTS_HH
+#endif // #ifndef DUNE_GEOMETRY_GENERICREFERENCEELEMENTS_HH
